@@ -1,7 +1,6 @@
-# coding=utf-8
-# =============================================================================
+# ============================================================================
 # Copyright (c) 2001-2019 FLIR Systems, Inc. All Rights Reserved.
-#
+
 # This software is the confidential and proprietary information of FLIR
 # Integrated Imaging Solutions, Inc. ("Confidential Information"). You
 # shall not disclose such Confidential Information and shall use it only in
@@ -14,18 +13,19 @@
 # PURPOSE, OR NON-INFRINGEMENT. FLIR SHALL NOT BE LIABLE FOR ANY DAMAGES
 # SUFFERED BY LICENSEE AS A RESULT OF USING, MODIFYING OR DISTRIBUTING
 # THIS SOFTWARE OR ITS DERIVATIVES.
-# =============================================================================
+# ============================================================================
 #
-#  SaveToAvi.py shows how to create an AVI video from a vector of
-#  images. It relies on information provided in the Enumeration, Acquisition,
-#  and NodeMapInfo examples.
+# AcquisitionMultipleCamera.py shows how to capture images from
+# multiple cameras simultaneously. It relies on information provided in the
+# Enumeration, Acquisition, and NodeMapInfo examples.
 #
-#  This example introduces the SpinVideo class, which is used to quickly and
-#  easily create various types of AVI videos. It demonstrates the creation of
-#  three types: uncompressed, MJPG, and H264.
+# This example reads similarly to the Acquisition example,
+# except that loops are used to allow for simultaneous acquisitions.
 
+import os
 import PySpin
 import _thread
+import multiprocessing
 
 class AviType:
     """'Enum' to select AVI video type to be created and saved"""
@@ -33,18 +33,17 @@ class AviType:
     MJPG = 1
     H264 = 2
 
-
 chosenAviType = AviType.H264  # change me!
-NUM_IMAGES = 500  # number of images to use in AVI file
+NUM_IMAGES = 500  # number of images to grab
+images = {}
 
-
-def save_list_to_avi(nodemap, nodemap_tldevice, images):
+def save_list_to_avi(nodemap, nodemap_tldevice, image):
     """
     This function prepares, saves, and cleans up an AVI video from a vector of images.
 
     :param nodemap: Device nodemap.
     :param nodemap_tldevice: Transport layer device nodemap.
-    :param images: List of images to save to an AVI video.
+    :param image: List of images to save to an AVI video.
     :type nodemap: INodeMap
     :type nodemap_tldevice: INodeMap
     :type images: list of ImagePtr
@@ -65,11 +64,6 @@ def save_list_to_avi(nodemap, nodemap_tldevice, images):
             print('Device serial number retrieved as %s...' % device_serial_number)
 
         # Get the current frame rate; acquisition frame rate recorded in hertz
-        #
-        # *** NOTES ***
-        # The video frame rate can be set to anything; however, in order to
-        # have videos play in real-time, the acquisition frame rate can be
-        # retrieved from the camera.
 
         node_acquisition_framerate = PySpin.CFloatPtr(nodemap.GetNode('AcquisitionFrameRate'))
         if not PySpin.IsAvailable(node_acquisition_framerate) and not PySpin.IsReadable(node_acquisition_framerate):
@@ -78,29 +72,10 @@ def save_list_to_avi(nodemap, nodemap_tldevice, images):
         # node_acquisition_framerate
 
         framerate_to_set = node_acquisition_framerate.GetValue()
-        # framerate_to_set = 30
 
         print('Frame rate to be set to %d...' % framerate_to_set)
 
         # Select option and open AVI filetype with unique filename
-        #
-        # *** NOTES ***
-        # Depending on the filetype, a number of settings need to be set in
-        # an object called an option. An uncompressed option only needs to
-        # have the video frame rate set whereas videos with MJPG or H264
-        # compressions should have more values set.
-        #
-        # Once the desired option object is configured, open the AVI file
-        # with the option in order to create the image file.
-        #
-        # Note that the filename does not need to be appended to the
-        # name of the file. This is because the AVI recorder object takes care
-        # of the file extension automatically.
-        #
-        # *** LATER ***
-        # Once all images have been added, it is important to close the file -
-        # this is similar to many other standard file streams.
-
         avi_recorder = PySpin.SpinVideo()
 
         if chosenAviType == AviType.UNCOMPRESSED:
@@ -122,8 +97,10 @@ def save_list_to_avi(nodemap, nodemap_tldevice, images):
             option = PySpin.H264Option()
             option.frameRate = framerate_to_set
             option.bitrate = 5000000 #decides the level of compression
-            option.height = images[0].GetHeight()
-            option.width = images[0].GetWidth()
+            option.height = image[0].GetHeight()
+            print('image height = %d' % (option.height))
+            option.width = image[0].GetWidth()
+            print('image height = %d' % (option.width))
 
         else:
             print('Error: Unknown AviType. Aborting...')
@@ -132,23 +109,16 @@ def save_list_to_avi(nodemap, nodemap_tldevice, images):
         avi_recorder.Open(avi_filename, option)
 
         # Construct and save AVI video
-        #
-        # *** NOTES ***
-        # Although the video file has been opened, images must be individually
-        # appended in order to construct the video.
-        print('Appending %d images to AVI file: %s.avi...' % (len(images), avi_filename))
 
-        for i in range(len(images)):
-            avi_recorder.Append(images[i])
+        print('Appending %d images to AVI file: %s.avi...' % (len(image), avi_filename))
+
+        print("Length of images is %d" %(len(image)))
+        for i in range(len(image)):
+            avi_recorder.Append(image[i])
             print('Appended image %d...' % i)
 
         # Close AVI file
         #
-        # *** NOTES ***
-        # Once all images have been appended, it is important to close the
-        # AVI file. Notice that once an AVI file has been closed, no more
-        # images can be added.
-
         avi_recorder.Close()
         print('Video saved at %s.avi' % avi_filename)
 
@@ -158,19 +128,52 @@ def save_list_to_avi(nodemap, nodemap_tldevice, images):
 
     return result
 
+def acquire_image(i,n):
+    try:
+        result = True
 
-def print_device_info(nodemap):
+        # acquire image
+        image_result = cam_list[i].GetNextImage()
+
+        if image_result.IsIncomplete():
+            print('Image incomplete with image status %d ... \n' % image_result.GetImageStatus())
+        else:
+            # Print image information
+            width = image_result.GetWidth()
+            height = image_result.GetHeight()
+            print('Camera %d grabbed image %d, width = %d, height = %d' % (i, n, width, height))
+
+            # Convert image to BayerRG8
+            images[i].append(image_result.Convert(PySpin.PixelFormat_BayerRG8, PySpin.HQ_LINEAR))
+            #images.append(image_result)
+            if n == 0:
+                print("Saving first image")
+                image_result.Save("Trial_image_of_cam_%d.jpg" %(i))
+
+
+        # Release image
+        image_result.Release()
+        print()
+
+    except PySpin.SpinnakerException as ex:
+        print('Error: %s' % ex)
+        result = False
+
+    return result
+
+def print_device_info(nodemap, cam_num):
     """
     This function prints the device information of the camera from the transport
-    layer; please see NodeMapInfo example for more in-depth comments on printing
-    device information from the nodemap.
-
+    layer;
     :param nodemap: Transport layer device nodemap.
+    :param cam_num: Camera number.
     :type nodemap: INodeMap
-    :return: True if successful, False otherwise.
+    :type cam_num: int
+    :returns: True if successful, False otherwise.
     :rtype: bool
     """
-    print('\n*** DEVICE INFORMATION ***\n')
+
+    print('Printing device information for camera %d... \n' % cam_num)
 
     try:
         result = True
@@ -185,6 +188,7 @@ def print_device_info(nodemap):
 
         else:
             print('Device control information not available.')
+        print()
 
     except PySpin.SpinnakerException as ex:
         print('Error: %s' % ex)
@@ -192,133 +196,102 @@ def print_device_info(nodemap):
 
     return result
 
-
-def acquire_images(cam, nodemap):
+def run_multiple_cameras():
     """
-    This function acquires 10 images from a device, stores them in a list, and returns the list.
-    please see the Acquisition example for more in-depth comments on acquiring images.
-
-    :param cam: Camera to acquire images from.
-    :param nodemap: Device nodemap.
-    :type cam: CameraPtr
-    :type nodemap: INodeMap
+    :param cam_list: List of cameras
+    :type cam_list: CameraList
     :return: True if successful, False otherwise.
     :rtype: bool
     """
-    print('*** IMAGE ACQUISITION ***\n')
     try:
         result = True
+        # Retrieve transport layer nodemaps and print device information for
+        # each camera
+        print('*** DEVICE INFORMATION ***\n')
 
-        # Set acquisition mode to continuous
-        # node_acquisition_mode = PySpin.CEnumerationPtr(nodemap.GetNode('AcquisitionMode'))
-        node_acquisition_mode = PySpin.CEnumerationPtr(cam.GetNodeMap().GetNode('AcquisitionMode'))
-        if not PySpin.IsAvailable(node_acquisition_mode) or not PySpin.IsWritable(node_acquisition_mode):
-            print('Unable to set acquisition mode to continuous (enum retrieval). Aborting...')
-            return False
+        for i, cam in enumerate(cam_list):
 
-        # Retrieve entry node from enumeration node
-        node_acquisition_mode_continuous = node_acquisition_mode.GetEntryByName('Continuous')
-        if not PySpin.IsAvailable(node_acquisition_mode_continuous) or not PySpin.IsReadable(
-                node_acquisition_mode_continuous):
-            print('Unable to set acquisition mode to continuous (entry retrieval). Aborting...')
-            return False
+            # Retrieve TL device nodemap
+            nodemap_tldevice = cam.GetTLDeviceNodeMap()
 
-        # Retrieve integer value from entry node
-        acquisition_mode_continuous = node_acquisition_mode_continuous.GetValue()
+            # Print device information
+            result &= print_device_info(nodemap_tldevice, i)
 
-        # Set integer value from entry node as new value of enumeration node
-        node_acquisition_mode.SetIntValue(acquisition_mode_continuous)
+            # Adding a image list for each camera
+            images[i] = list()
 
-        print('Acquisition mode set to continuous...')
+        # Initialize each camera
+        # *** LATER ***
+        # Each camera needs to be deinitialized once all images have been
+        # acquired.
+        for i, cam in enumerate(cam_list):
 
-        # #Setting image format to color <- added
-        # if cam.PixelFormat.GetAccessMode() == PySpin.RW:
-        #     cam.PixelFormat.SetValue(PySpin.PixelFormat_BayerRG8)
-        #     print('Pixel format set to %s...' % cam.PixelFormat.GetCurrentEntry().GetSymbolic())
+            # Initialize camera
+            cam.Init()
+
+            # Set acquisition mode to continuous
+            node_acquisition_mode = PySpin.CEnumerationPtr(cam.GetNodeMap().GetNode('AcquisitionMode'))
+            if not PySpin.IsAvailable(node_acquisition_mode) or not PySpin.IsWritable(node_acquisition_mode):
+                print('Unable to set acquisition mode to continuous (node retrieval; camera %d). Aborting... \n' % i)
+                return False
+
+            node_acquisition_mode_continuous = node_acquisition_mode.GetEntryByName('Continuous')
+            if not PySpin.IsAvailable(node_acquisition_mode_continuous) or not PySpin.IsReadable(
+                    node_acquisition_mode_continuous):
+                print('Unable to set acquisition mode to continuous (entry \'continuous\' retrieval %d). \
+                Aborting... \n' % i)
+                return False
+
+            acquisition_mode_continuous = node_acquisition_mode_continuous.GetValue()
+
+            node_acquisition_mode.SetIntValue(acquisition_mode_continuous)
+
+            print('Camera %d acquisition mode set to continuous...' % i)
+
+            # Begin acquiring images
+            cam.BeginAcquisition()
+
+            print('Camera %d started acquiring images...' % i)
+
+            print()
+
+        # Retrieve, convert, and save images for each camera
         #
-        # else:
-        #     print('Pixel format not available...')
-        #     result = False
+        for n in range(NUM_IMAGES):
+            for i, cam in enumerate(cam_list):
+                # Acquire image on all cameras
+                try:
+                    _thread.start_new_thread(acquire_image,(i,n))
+                except Exception as e: print(e)
 
-        #  Begin acquiring images
-        cam.BeginAcquisition()
+                # p1 = multiprocessing.Process(target=acquire_image, args=(0,n))
+                # p2 = multiprocessing.Process(target=acquire_image, args=(1,n))
+                #
+                # # starting process 1
+                # p1.start()
+                # # starting process 2
+                # p2.start()
+                #
+                # # wait until process 1 is finished
+                # p1.join()
+                # # wait until process 2 is finished
+                # p2.join()
 
-        print('Acquiring images...')
+        # Deinitialize each camera
+        for i, cam in enumerate(cam_list):
+            # End acquisition
+            cam.EndAcquisition()
 
-        # Retrieve, convert, and save images
-        images = list()
+            nodemap_tldevice = cam.GetTLDeviceNodeMap()
+            # Retrieve GenICam nodemap
+            nodemap = cam.GetNodeMap()
+            result &= save_list_to_avi(nodemap, nodemap_tldevice, images[i])
 
-        for i in range(NUM_IMAGES):
-            try:
-                #  Retrieve next received image
-                image_result = cam.GetNextImage()
+            # Deinitialize camera
+            cam.DeInit()
 
-                #  Ensure image completion
-                if image_result.IsIncomplete():
-                    print('Image incomplete with image status %d...' % image_result.GetImageStatus())
-
-                else:
-                    #  Print image information; height and width recorded in pixels
-                    width = image_result.GetWidth()
-                    height = image_result.GetHeight()
-                    print('Grabbed Image %d, width = %d, height = %d' % (i, width, height))
-
-                    #  Convert image to mono 8 and append to list
-                    # images.append(image_result.Convert(PySpin.PixelFormat_Mono8, PySpin.HQ_LINEAR))
-                    images.append(image_result.Convert(PySpin.PixelFormat_BayerRG8, PySpin.HQ_LINEAR))
-
-                    #  Release image
-                    image_result.Release()
-                    print('')
-
-            except PySpin.SpinnakerException as ex:
-                print('Error: %s' % ex)
-                result = False
-
-        # End acquisition
-        cam.EndAcquisition()
-
-    except PySpin.SpinnakerException as ex:
-        print('Error: %s' % ex)
-        result = False
-
-    return result, images
-
-
-def run_single_camera(cam):
-    """
-    This function acts as the body of the example; please see NodeMapInfo example
-    for more in-depth comments on setting up cameras.
-
-    :param cam: Camera to run example on.
-    :type cam: CameraPtr
-    :return: True if successful, False otherwise.
-    :rtype: bool
-    """
-
-    try:
-        result = True
-
-        # Retrieve TL device nodemap and print device information
-        nodemap_tldevice = cam.GetTLDeviceNodeMap()
-
-        result &= print_device_info(nodemap_tldevice)
-
-        # Initialize camera
-        cam.Init()
-
-        # Retrieve GenICam nodemap
-        nodemap = cam.GetNodeMap()
-
-        # Acquire list of images
-        err, images = acquire_images(cam, nodemap)
-        if err < 0:
-            return err
-
-        result &= save_list_to_avi(nodemap, nodemap_tldevice, images)
-
-        # Deinitialize camera
-        cam.DeInit()
+            # Release reference to camera
+            del cam
 
     except PySpin.SpinnakerException as ex:
         print('Error: %s' % ex)
@@ -326,16 +299,28 @@ def run_single_camera(cam):
 
     return result
 
-
 def main():
     """
-    Example entry point; please see Enumeration example for more in-depth
-    comments on preparing and cleaning up the system.
-
     :return: True if successful, False otherwise.
     :rtype: bool
     """
+
+    # Since this application saves images in the current folder
+    # we must ensure that we have permission to write to this folder.
+    # If we do not have permission, fail right away.
+    try:
+        test_file = open('test.txt', 'w+')
+    except IOError:
+        print('Unable to write to current directory. Please check permissions.')
+        input('Press Enter to exit...')
+        return False
+
+    test_file.close()
+    os.remove(test_file.name)
+
     result = True
+
+
 
     # Retrieve singleton reference to system object
     system = PySpin.System.GetInstance()
@@ -345,14 +330,16 @@ def main():
     print('Library version: %d.%d.%d.%d' % (version.major, version.minor, version.type, version.build))
 
     # Retrieve list of cameras from the system
+    global cam_list
     cam_list = system.GetCameras()
 
     num_cameras = cam_list.GetSize()
 
-    print('Number of cameras detected:', num_cameras)
+    print('Number of cameras detected: %d' % num_cameras)
 
     # Finish if there are no cameras
     if num_cameras == 0:
+
         # Clear camera list before releasing system
         cam_list.Clear()
 
@@ -363,36 +350,21 @@ def main():
         input('Done! Press Enter to exit...')
         return False
 
+    # Run on all cameras
+    print('Running for all cameras...')
 
-    #Run example on each camera
-    for i, cam in enumerate(cam_list):
-        print('Running example for camera %d...' % i)
-        try:
-            # initiating the thread of sending email, mail is the name of the file and send_mail is name of the function(method)
-            #_thread.start_new_thread(mail.send_mail, (sender, sender_pwd, receiver, cc, file_location, file_name))
-            _thread.start_new_thread(run_single_camera, (cam, ))
+    result = run_multiple_cameras()
 
-        except:
-            print ("unable to start thread")
-
-        #result &= run_single_camera(cam)
-        print('Camera %d example complete... \n' % i)
-
-    # Release reference to camera
-    # NOTE: Unlike the C++ examples, we cannot rely on pointer objects being automatically
-    # cleaned up when going out of scope.
-    # The usage of del is preferred to assigning the variable to None.
-    #del cam
+    print('complete... \n')
 
     # Clear camera list before releasing system
-    #cam_list.Clear()
+    cam_list.Clear()
 
-    # Release instance
-    #system.ReleaseInstance()
+    # Release system instance
+    system.ReleaseInstance()
 
     input('Done! Press Enter to exit...')
     return result
-
 
 if __name__ == '__main__':
     main()
