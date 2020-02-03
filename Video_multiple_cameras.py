@@ -24,8 +24,8 @@
 
 import os
 import PySpin
-import _thread
-import multiprocessing
+from threading import Thread
+from queue import Queue
 
 class AviType:
     """'Enum' to select AVI video type to be created and saved"""
@@ -36,6 +36,7 @@ class AviType:
 chosenAviType = AviType.H264  # change me!
 NUM_IMAGES = 500  # number of images to grab
 images = {}
+queues = {}
 
 def save_list_to_avi(nodemap, nodemap_tldevice, image):
     """
@@ -112,13 +113,14 @@ def save_list_to_avi(nodemap, nodemap_tldevice, image):
 
         print('Appending %d images to AVI file: %s.avi...' % (len(image), avi_filename))
 
-        print("Length of images is %d" %(len(image)))
+        #print("Length of images is %d" %(len(image)))
         for i in range(len(image)):
             avi_recorder.Append(image[i])
-            print('Appended image %d...' % i)
+            #print('Appended image %d...' % i)
 
         # Close AVI file
         #
+        avi_recorder.save("\\D:\\")
         avi_recorder.Close()
         print('Video saved at %s.avi' % avi_filename)
 
@@ -128,36 +130,46 @@ def save_list_to_avi(nodemap, nodemap_tldevice, image):
 
     return result
 
-def acquire_image(i,n):
-    try:
-        result = True
+def acquire_image(i):
+    #print("In the thread")
+    n = 0;  #indicating the image number
+    while True:
+        # fetching one value from the queue, the thread will wait for a value in the queue
+        q = queues[i].get()
+        #print("value of q is %s" % q)
+        if q is not None:
+            try:
+                result = True
+                # acquire image
+                n += 1  #incrementing the image counter
 
-        # acquire image
-        image_result = cam_list[i].GetNextImage()
+                image_result = cam_list[i].GetNextImage()
+                if image_result.IsIncomplete():
+                    print('Image incomplete with image status %d ... \n' % image_result.GetImageStatus())
+                else:
+                    # Print image information
+                    width = image_result.GetWidth()
+                    height = image_result.GetHeight()
+                    #print('Camera %d grabbed image %d, width = %d, height = %d' % (i, n, width, height))
 
-        if image_result.IsIncomplete():
-            print('Image incomplete with image status %d ... \n' % image_result.GetImageStatus())
+                    # Convert image to BayerRG8
+                    images[i].append(image_result.Convert(PySpin.PixelFormat_BayerRG8, PySpin.HQ_LINEAR))
+                    #images.append(image_result)
+                    #if n == 0:
+                    #    print("Saving first image")
+                    #    image_result.Save("Trial_image_of_cam_%d.jpg" %(i))
+
+
+                # Release image
+                image_result.Release()
+                #print()
+
+            except PySpin.SpinnakerException as ex:
+                print('Error: %s' % ex)
+                result = False
         else:
-            # Print image information
-            width = image_result.GetWidth()
-            height = image_result.GetHeight()
-            print('Camera %d grabbed image %d, width = %d, height = %d' % (i, n, width, height))
-
-            # Convert image to BayerRG8
-            images[i].append(image_result.Convert(PySpin.PixelFormat_BayerRG8, PySpin.HQ_LINEAR))
-            #images.append(image_result)
-            if n == 0:
-                print("Saving first image")
-                image_result.Save("Trial_image_of_cam_%d.jpg" %(i))
-
-
-        # Release image
-        image_result.Release()
-        print()
-
-    except PySpin.SpinnakerException as ex:
-        print('Error: %s' % ex)
-        result = False
+            #print("Finished frame acquisition for camera %d  \n" % i)
+            break;
 
     return result
 
@@ -219,6 +231,8 @@ def run_multiple_cameras():
 
             # Adding a image list for each camera
             images[i] = list()
+            # Adding a queue for each camera
+            queues[i] = Queue()
 
         # Initialize each camera
         # *** LATER ***
@@ -256,26 +270,24 @@ def run_multiple_cameras():
             print()
 
         # Retrieve, convert, and save images for each camera
-        #
-        for n in range(NUM_IMAGES):
-            for i, cam in enumerate(cam_list):
-                # Acquire image on all cameras
-                try:
-                    _thread.start_new_thread(acquire_image,(i,n))
-                except Exception as e: print(e)
+        t={}
+        for i, cam in enumerate(cam_list):
+            # Acquire image on all cameras
+            t[i]=Thread(target = acquire_image,args=(i,))
+            t[i].start()
 
-                # p1 = multiprocessing.Process(target=acquire_image, args=(0,n))
-                # p2 = multiprocessing.Process(target=acquire_image, args=(1,n))
-                #
-                # # starting process 1
-                # p1.start()
-                # # starting process 2
-                # p2.start()
-                #
-                # # wait until process 1 is finished
-                # p1.join()
-                # # wait until process 2 is finished
-                # p2.join()
+        for n in range(NUM_IMAGES):
+            for i,cam in enumerate(cam_list):
+                #Adding 1 for every frame to be captured
+                queues[i].put("1")
+
+        #Ending the thread by adding a None in the queue
+        for i, cam in enumerate(cam_list):
+            queues[i].put(None)
+
+        # making sure the video generation by frame compilation only starts
+        for i,cam in enumerate(cam_list):
+             t[i].join()
 
         # Deinitialize each camera
         for i, cam in enumerate(cam_list):
