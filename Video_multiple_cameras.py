@@ -24,9 +24,8 @@
 
 import os
 import PySpin
-from threading import Thread, Event
+from threading import Thread
 from queue import Queue
-import time
 
 class AviType:
     """'Enum' to select AVI video type to be created and saved"""
@@ -34,10 +33,10 @@ class AviType:
     MJPG = 1
     H264 = 2
 
-chosenAviType = AviType.H264  #change me!
+chosenAviType = AviType.H264  # change me!
 NUM_IMAGES = 500  # number of images to grab
-
-
+images = {}
+queues = {}
 
 def save_list_to_avi(nodemap, nodemap_tldevice, image):
     """
@@ -120,6 +119,8 @@ def save_list_to_avi(nodemap, nodemap_tldevice, image):
             #print('Appended image %d...' % i)
 
         # Close AVI file
+        #
+        avi_recorder.save("\\D:\\")
         avi_recorder.Close()
         print('Video saved at %s.avi' % avi_filename)
 
@@ -129,35 +130,30 @@ def save_list_to_avi(nodemap, nodemap_tldevice, image):
 
     return result
 
-def acquire_image(cam, queue_temp, images_temp, event_for_main,i):
+def acquire_image(i):
     #print("In the thread")
     n = 0;  #indicating the image number
     while True:
         # fetching one value from the queue, the thread will wait for a value in the queue
-        q = queue_temp.get()
-
+        q = queues[i].get()
+        #print("value of q is %s" % q)
         if q is not None:
             try:
                 result = True
                 # acquire image
                 n += 1  #incrementing the image counter
 
-                image_result = cam.GetNextImage()
+                image_result = cam_list[i].GetNextImage()
                 if image_result.IsIncomplete():
                     print('Image incomplete with image status %d ... \n' % image_result.GetImageStatus())
                 else:
                     # Print image information
                     width = image_result.GetWidth()
                     height = image_result.GetHeight()
-                    print('Camera %d grabbed image %d, width = %d, height = %d' % (i,n, width, height))
+                    #print('Camera %d grabbed image %d, width = %d, height = %d' % (i, n, width, height))
 
                     # Convert image to BayerRG8
-                    images_temp.append(image_result.Convert(PySpin.PixelFormat_BayerRG8, PySpin.HQ_LINEAR))
-
-                    ##indidicating the main thread that
-                    event_for_main.set()
-                    print("\n Event true for cam %d" % i)
-
+                    images[i].append(image_result.Convert(PySpin.PixelFormat_BayerRG8, PySpin.HQ_LINEAR))
                     #images.append(image_result)
                     #if n == 0:
                     #    print("Saving first image")
@@ -212,16 +208,13 @@ def print_device_info(nodemap, cam_num):
 
     return result
 
-def run_multiple_cameras(cam_list):
+def run_multiple_cameras():
     """
     :param cam_list: List of cameras
     :type cam_list: CameraList
     :return: True if successful, False otherwise.
     :rtype: bool
     """
-    images = {}
-    queues = {}
-    event_for_main = {}
     try:
         result = True
         # Retrieve transport layer nodemaps and print device information for
@@ -240,9 +233,6 @@ def run_multiple_cameras(cam_list):
             images[i] = list()
             # Adding a queue for each camera
             queues[i] = Queue()
-
-            # Adding an event for each thread
-            event_for_main[i] = Event()
 
         # Initialize each camera
         # *** LATER ***
@@ -283,27 +273,19 @@ def run_multiple_cameras(cam_list):
         t={}
         for i, cam in enumerate(cam_list):
             # Acquire image on all cameras
-            t[i]=Thread(target = acquire_image,args=(cam_list[i],queues[i],images[i],event_for_main[i],i))
+            t[i]=Thread(target = acquire_image,args=(i,))
             t[i].start()
 
         for n in range(NUM_IMAGES):
-            # Adding a delay to make sure no more than 30 1s are added to the queue in a second
-            time.sleep(1/30)
-
             for i,cam in enumerate(cam_list):
                 #Adding 1 for every frame to be captured
                 queues[i].put("1")
-                #print("\nAdding 1 to the queue for cam %d" % i)
-
-            for i, cam in enumerate(cam_list):
-                # Waiting for each thread to signal successful frame capture
-                event_for_main[i].wait()
 
         #Ending the thread by adding a None in the queue
         for i, cam in enumerate(cam_list):
             queues[i].put(None)
 
-        # making sure the video generation by frame compilation only starts after all the frames are captured
+        # making sure the video generation by frame compilation only starts
         for i,cam in enumerate(cam_list):
              t[i].join()
 
@@ -360,6 +342,7 @@ def main():
     print('Library version: %d.%d.%d.%d' % (version.major, version.minor, version.type, version.build))
 
     # Retrieve list of cameras from the system
+    global cam_list
     cam_list = system.GetCameras()
 
     num_cameras = cam_list.GetSize()
@@ -382,7 +365,7 @@ def main():
     # Run on all cameras
     print('Running for all cameras...')
 
-    result = run_multiple_cameras(cam_list)
+    result = run_multiple_cameras()
 
     print('complete... \n')
 
