@@ -11,6 +11,13 @@ from skimage.transform import SimilarityTransform, PiecewiseAffineTransform, war
 
 class PainDetector:
     def __init__(self, afar_checkpoint='', fan_checkpoint='', channels=1, image_size=160, fc2_size=400):
+        """
+        :param afar_checkpoint: AFAR checkpoint path, cannot be empty
+        :param fan_checkpoint: FAN checkpoint path, if empty will download pretrained model
+        :param channels: number or heads for output
+        :param image_size: image size after face detection, must correspond to afar_checkpoint
+        :param fc2_size: size of fc2, must correspond to afar_checkpoint
+        """
         self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         self.image_size = image_size
         # load FAN landmark detector including SFD face detector
@@ -83,6 +90,11 @@ class PainDetector:
         return dst
 
     def predict_pain(self, image):
+        """
+        Main predictor function, takes an image as input and returns a float number as pain prediction
+        :param image: RGB input image, size (Height x Width x Channel)
+        :return: a float32 number
+        """
         landmarks = self.face_detector(image)
         pred_pains = []
         with torch.no_grad():
@@ -93,7 +105,8 @@ class PainDetector:
                 b_box = [landmark[:, 0].min(), landmark[:, 1].min(), landmark[:, 0].max(), landmark[:, 1].max()]
                 image_face = self.crop_image(image_face, b_box)
                 image_face = cv2.resize(image_face, (self.image_size, self.image_size))
-                image_face = np.matmul(image_face, np.array([[0.114], [0.587], [0.299]])).astype(np.float32)
-                image_face = image_face.transpose((2, 0, 1))[None]
+                if len(image_face.shape) > 2 and image_face.shape[2] == 3:
+                    image_face = np.matmul(image_face, np.array([[0.114], [0.587], [0.299]]))
+                image_face = image_face.transpose((2, 0, 1))[None].astype(np.float32)
                 pred_pains.append(self.AFAR(torch.from_numpy(image_face)))
         return pred_pains
