@@ -36,13 +36,13 @@ class PainDetector:
         fh, fw, bl, bt, br, bb = int(fh), int(fw), int(bl), int(bt), int(br), int(bb)
 
         a_slice = frame[max(0, min(bt, fh)):min(fh, max(bb, 0)), max(0, min(bl, fw)):min(fw, max(br, 0)), :]
-        new_image = np.zeros((bb - bt, br - bl, 3), dtype=np.uint8)
+        new_image = np.zeros((bb - bt, br - bl, 3), dtype=np.float32)
         new_image[max(0, min(bt, fh)) - bt:min(fh, max(bb, 0)) - bt, max(0, min(bl, fw)) - bl:min(fw, max(br, 0)) - bl,
                   :] = a_slice
 
         h, w = new_image.shape[:2]
         m = max(h, w)
-        square_image = np.zeros((m, m, 3), dtype=np.uint8)
+        square_image = np.zeros((m, m, 3), dtype=np.float32)
         square_image[(m - h) // 2:h + (m - h) // 2, (m - w) // 2:w + (m - w) // 2, :] = new_image
         return square_image
 
@@ -87,11 +87,12 @@ class PainDetector:
         pred_pains = []
         with torch.no_grad():
             for landmark in landmarks:
-                b_box = [landmark[:, 0].min(), landmark[:, 1].min(), landmark[:, 0].max(), landmark[:, 1].max()]
-                image_face = self.crop_image(image, b_box)
-                image_face = cv2.resize(image_face, (self.image_size, self.image_size))
-                image_face, lmks = self.similarity_transform(image_face, landmark)
+                image_face, lmks = self.similarity_transform(image, landmark)
                 image_face = self.piecewise_affine_transform(image_face, lmks, self.mean_lmks)
+                landmark = self.mean_lmks.round().astype(np.int)
+                b_box = [landmark[:, 0].min(), landmark[:, 1].min(), landmark[:, 0].max(), landmark[:, 1].max()]
+                image_face = self.crop_image(image_face, b_box)
+                image_face = cv2.resize(image_face, (self.image_size, self.image_size))
                 image_face = np.matmul(image_face, np.array([[0.114], [0.587], [0.299]])).astype(np.float32)
                 image_face = image_face.transpose((2, 0, 1))[None]
                 pred_pains.append(self.AFAR(torch.from_numpy(image_face)))
