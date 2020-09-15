@@ -1,4 +1,4 @@
-from AFAR.pain_detector import PainDetector
+from pain_detector import PainDetector
 import cv2
 import time
 

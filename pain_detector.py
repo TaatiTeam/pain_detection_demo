@@ -3,7 +3,7 @@ sys.path.append('..')
 sys.path.append('.')
 import torch
 import face_alignment as FAN
-from AFAR.afar import AFAR, ConvNetOrdinalLateFusion
+from models.comparative_model import ConvNetOrdinalLateFusion
 import numpy as np
 import cv2
 from skimage.transform import SimilarityTransform, PiecewiseAffineTransform, warp
