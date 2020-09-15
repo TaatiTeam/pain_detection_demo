@@ -4,6 +4,7 @@ from glob import glob
 
 
 pain_detector = PainDetector(image_size=160, checkpoint_path='checkpoints/50342566/50343918_3/model_epoch4.pt')
+print(pain_detector.device)
 ref_frame1 = cv2.imread('example_frames/example-reference-frame.png')
 ref_frame2 = cv2.imread('example_frames/example-reference-frame.png')
 pain_detector.add_references([ref_frame1, ref_frame2])
