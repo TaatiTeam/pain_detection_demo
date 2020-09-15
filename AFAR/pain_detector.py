@@ -116,8 +116,6 @@ class PainDetector:
         image_face = cv2.resize(image_face, (self.image_size, self.image_size))
         if len(image_face.shape) > 2 and image_face.shape[2] == 3:
             image_face = np.matmul(image_face, np.array([[0.114], [0.587], [0.299]]))
-        # image_face = self.clahe.apply(image_face)
-        # image_face = image_face.transpose((2, 0, 1))[None].astype(np.float32)
         image_face = self.clahe.apply((image_face * 255).astype(np.uint8))
         image_face = image_face.reshape(1, 1, self.image_size, self.image_size).astype(np.float32)
         return torch.from_numpy(image_face) / 255
