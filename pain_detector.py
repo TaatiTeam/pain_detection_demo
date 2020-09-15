@@ -10,13 +10,11 @@ from skimage.transform import SimilarityTransform, PiecewiseAffineTransform, war
 
 
 class PainDetector:
-    def __init__(self, checkpoint_path='', fan_checkpoint='', channels=1, image_size=160, fc2_size=400):
+    def __init__(self, checkpoint_path='', fan_checkpoint='', image_size=160):
         """
         :param checkpoint_path: model checkpoint path, cannot be empty
         :param fan_checkpoint: FAN checkpoint path, if empty will download pretrained model
-        :param channels: number or heads for output
         :param image_size: image size after face detection, must correspond to afar_checkpoint
-        :param fc2_size: size of fc2, must correspond to afar_checkpoint
         """
         self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         self.ref_frames = []
