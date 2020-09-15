@@ -8,6 +8,9 @@ print(pain_detector.device)
 ref_frame1 = cv2.imread('example_frames/example-reference-frame.png')
 ref_frame2 = cv2.imread('example_frames/example-reference-frame.png')
 ref_frame3 = cv2.imread('example_frames/example-reference-frame.png')
+# In this example the reference frames are identical, but in a real scenario, the idea is to use different
+# reference frames from the same person. Ideally, the reference frames should have a neutral expression and should
+# exhibit slight lighting and camera angle variations.
 pain_detector.add_references([ref_frame1, ref_frame2, ref_frame3])
 target_frame = cv2.imread('example_frames/example-target-frame.png')
 pain_estimate = pain_detector.predict_pain(target_frame)
