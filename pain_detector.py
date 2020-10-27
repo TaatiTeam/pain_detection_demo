@@ -51,7 +51,9 @@ class PainDetector:
 
     @staticmethod
     def similarity_transform(image, landmarks):
-        anchor = np.array([[110, 71], [210, 71], [160, 170]], np.float32)
+        # anchor coordinate are based on the 240x320 resolution and need to be scaled accodingly for different size images.
+        anchor_scale = 320 / image.shape[1]
+        anchor = np.array([[110, 71], [210, 71], [160, 170]], np.float32) / anchor_scale
         idx = [36, 45, 57]
         tform = SimilarityTransform()
         tform.estimate(landmarks[idx, :], anchor)
@@ -95,20 +97,25 @@ class PainDetector:
         for image in image_list:
             self.ref_frames.append(self.prep_image(image))
 
-    def prep_image(self, image):
+    def prep_image(self, image, scale_to=320):
         """
         Runs images through the preprocessing steps
         :param image: A numpy image of shape (H, W, 3). The image should only have one face in it
         :return: Returns an image ready to be passed to the model
         """
+        # Scaling the image to reduce its width to `scale_to`.
+        # This makes sure that the run time is consistent by making sure the input image size is fixed.
+        image = cv2.resize(image, (scale_to, int(image.shape[0] * scale_to/image.shape[1])), interpolation=cv2.INTER_AREA)
+        # We need to `mean_lmks`, because `self.mean_lmks` is based on 240x320 resolution images
+        mean_lmks = self.mean_lmks * scale_to / 320
         landmarks = self.face_detector(image)
         if len(landmarks) > 1:
             ValueError('Reference image had more than one face. I should only have one')
         else:
             landmark = landmarks[0]
         image_face, lmks = self.similarity_transform(image, landmark)
-        image_face = self.piecewise_affine_transform(image_face, lmks, self.mean_lmks)
-        landmark = self.mean_lmks.round().astype(np.int)
+        image_face = self.piecewise_affine_transform(image_face, lmks, mean_lmks)
+        landmark = mean_lmks.round().astype(np.int)
         b_box = [landmark[:, 0].min(), landmark[:, 1].min(), landmark[:, 0].max(), landmark[:, 1].max()]
         image_face = self.crop_image(image_face, b_box)
         image_face = cv2.resize(image_face, (self.image_size, self.image_size))
