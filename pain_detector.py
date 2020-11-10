@@ -97,6 +97,27 @@ class PainDetector:
         for image in image_list:
             self.ref_frames.append(self.prep_image(image))
 
+    def verify_refenerece_image(self, image, scale_to=320, color=(0, 255, 0), size=4, offset=(0, 0)):
+        """
+        It run the input image through the pre-processing steps (most importantly face and landmark detection).
+        It then draws the landmarks on the image so it can be visually inspected.
+        :param image: An image with a frontal face in it
+        :return: The input image with facial landmarks overlaid
+        """
+        # Scaling the image to reduce its width to `scale_to`.
+        # This makes sure that the run time is consistent by making sure the input image size is fixed.
+        image = np.flip(image, axis=2)
+        image = cv2.resize(image, (scale_to, int(image.shape[0] * scale_to/image.shape[1])), interpolation=cv2.INTER_AREA)
+        landmarks = self.face_detector(image)
+        num_faces = 0 if landmarks is None else len(landmarks)
+        cv2.putText(image, '{} face/s detected'.format(num_faces), (7, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (70, 70, 70))
+        cv2.putText(image, '{} face/s detected'.format(num_faces), (6, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color)
+        for lmk in landmarks:
+            for lm in lmk.astype(np.int):
+                cv2.drawMarker(image, (lm[0] + offset[0], lm[1] + offset[1]), color, cv2.MARKER_CROSS, size)
+
+        return image
+
     def prep_image(self, image, scale_to=320):
         """
         Runs images through the preprocessing steps
