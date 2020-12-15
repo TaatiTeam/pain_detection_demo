@@ -51,7 +51,7 @@ class PainDetector:
 
     @staticmethod
     def similarity_transform(image, landmarks):
-        # anchor coordinate are based on the 240x320 resolution and need to be scaled accodingly for different size images.
+        # anchor coordinate are based on the 240x320 resolution and need to be scaled accordingly for different size images.
         anchor_scale = 320 / image.shape[1]
         anchor = np.array([[110, 71], [210, 71], [160, 170]], np.float32) / anchor_scale
         idx = [36, 45, 57]
@@ -150,7 +150,7 @@ class PainDetector:
         """
         Main predictor function, takes an image as input and returns a float number as pain prediction
         :param image: RGB input image, size (Height x Width x Channel)
-        :return: a float32 number
+        :return: a float32 number, the estimated pain score
         """
         pain_scores = []
         target_frame = self.prep_image(image)
