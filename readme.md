@@ -1,5 +1,5 @@
-A minimal repository to demo the pain detection model proposed in the paper titled _Unobtrusive Pain Monitoring in Older Adults with Dementia
-using Pairwise and Contrastive Training_. [Link will be added once published]
+A minimal repository to demo the pain detection model proposed in the paper titled [Unobtrusive Pain Monitoring in Older Adults with Dementia
+using Pairwise and Contrastive Training](https://ieeexplore.ieee.org/document/9298886). It is available under the "Early Access" area on IEEE Xplore, and it can be cited with its DOI.
 
 <p align="center"><img src="docs/images/saliency-S64-wint-contrastive.png" /></p>
 
@@ -12,4 +12,7 @@ It should print out 5.49 pain score (PSPI) for the frames in the `example_frames
 We achieved ~9FPS on a PC with an NVIDIA RTX-2080 Ti GPU and Intel i9-9900K CPU @ 3.60GHz.
 Currently [Face Alignment Network (and S3FD)](https://github.com/1adrianb/face-alignment) are use to detect and align faces.
 These could be swapped for faster non-deep learning methods to improve performance.
+
+
+
 
