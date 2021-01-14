@@ -10,7 +10,7 @@ from skimage.transform import SimilarityTransform, PiecewiseAffineTransform, war
 
 
 class PainDetector:
-    def __init__(self, checkpoint_path='', fan_checkpoint='', image_size=160):
+    def __init__(self, num_outputs, checkpoint_path='', fan_checkpoint='', image_size=160):
         """
         :param checkpoint_path: model checkpoint path, cannot be empty
         :param fan_checkpoint: FAN checkpoint path, if empty will download pretrained model
@@ -28,7 +28,7 @@ class PainDetector:
         self.mean_lmks = self.mean_lmks * 155 / self.mean_lmks.max()
         self.mean_lmks[:, 1] += 15
         # load model model
-        self.model = ConvNetOrdinalLateFusion(num_outputs=40)
+        self.model = ConvNetOrdinalLateFusion(num_outputs=num_outputs)
         self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
         self.model.eval()
 
