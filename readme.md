@@ -1,4 +1,4 @@
-A minimal repository to demo the pain detection model proposed in the paper titled [Unobtrusive Pain Monitoring in Older Adults with Dementia
+A minimal repository (including pre-trained models) to demo the pain detection model proposed in the paper titled [Unobtrusive Pain Monitoring in Older Adults with Dementia
 using Pairwise and Contrastive Training](https://ieeexplore.ieee.org/document/9298886). It is available under the "Early Access" area on IEEE Xplore, and it can be cited with its DOI.
 
 <p align="center"><img src="docs/images/saliency-S64-wint-contrastive.png" /></p>
